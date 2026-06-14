@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>IPTVStream FR</title>
+<meta name="application-name" content="IPTVStream">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IPTVStream">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0c10">
+<meta name="description" content="Lecteur IPTV français — chaînes FR, sports, cinéma">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<!-- PWA Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0c10;--surf:#12151c;--elev:#1a1f2e;--acc:#00d4ff;--adim:rgba(0,212,255,.12);--glow:0 0 16px rgba(0,212,255,.35);--text:#eef0f6;--muted:#7a8499;--faint:#3d4558;--bord:rgba(255,255,255,.05);--ba:rgba(0,212,255,.25);--red:#ff4757;--green:#2ed573;--t:.18s ease}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+button{cursor:pointer;border:none;background:none;font-family:inherit;color:inherit}
+input{font-family:inherit;outline:none}
+.app{display:flex;height:100vh}
+
+/* SIDEBAR */
+.sb{width:250px;min-width:250px;background:var(--surf);border-right:1px solid var(--bord);display:flex;flex-direction:column;overflow:hidden}
+.sb-logo{display:flex;align-items:center;gap:10px;padding:16px 14px;border-bottom:1px solid var(--bord);flex-shrink:0}
+.sb-logo-ico{width:32px;height:32px;background:var(--acc);border-radius:8px;display:grid;place-items:center;font-size:16px;box-shadow:var(--glow);flex-shrink:0}
+.sb-logo-txt{font-size:14px;font-weight:700}
+.sb-logo-txt span{color:var(--acc)}
+.sb-scroll{flex:1;overflow-y:auto;padding:8px 0;scrollbar-width:thin;scrollbar-color:var(--elev) transparent}
+.sb-sec{padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--faint)}
+.sb-divider{height:1px;background:var(--bord);margin:8px 14px}
+
+/* Dossier parent */
+.folder-hd{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;margin:1px 6px;cursor:pointer;transition:all var(--t)}
+.folder-hd:hover{background:var(--elev)}
+.folder-hd.on{background:var(--adim)}
+.folder-arrow{font-size:8px;color:var(--faint);transition:transform var(--t);flex-shrink:0}
+.folder-arrow.open{transform:rotate(90deg)}
+.folder-ico{font-size:16px;flex-shrink:0}
+.folder-lbl{font-size:13px;font-weight:600;color:var(--muted);flex:1}
+.folder-hd.on .folder-lbl,.folder-hd:hover .folder-lbl{color:var(--text)}
+.folder-cnt{font-size:10px;color:var(--faint);background:var(--elev);padding:1px 6px;border-radius:999px;flex-shrink:0}
+
+/* Sous-dossier */
+.sub-list{padding-left:14px}
+.sub-btn{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;margin:1px 6px 1px 0;width:calc(100% - 12px);font-size:12px;font-weight:500;color:var(--muted);transition:all var(--t)}
+.sub-btn:hover{background:var(--elev);color:var(--text)}
+.sub-btn.on{background:var(--adim);color:var(--acc)}
+.sub-ico{font-size:13px;flex-shrink:0}
+.sub-lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub-cnt{font-size:10px;color:var(--faint);flex-shrink:0}
+.sub-btn.on .sub-cnt{color:rgba(0,212,255,.6)}
+
+/* Lien simple */
+.sb-link{display:flex;align-items:center;gap:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted);transition:all var(--t);border-radius:8px;margin:1px 6px;width:calc(100% - 12px)}
+.sb-link:hover{background:var(--elev);color:var(--text)}
+.sb-link.on{background:var(--adim);color:var(--acc)}
+
+/* Footer */
+.sb-foot{border-top:1px solid var(--bord);padding:10px 14px;flex-shrink:0;display:flex;align-items:center;gap:9px}
+.sb-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--acc),#7c3aed);display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.sb-uname{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-exp{font-size:10px;color:var(--green)}
+.logout{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--faint);font-size:11px;transition:all var(--t)}
+.logout:hover{background:rgba(255,71,87,.15);color:var(--red)}
+
+/* CONTENU */
+.content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.c-head{padding:16px 22px 12px;flex-shrink:0}
+.breadcrumb{font-size:11px;color:var(--faint);margin-bottom:8px}
+.breadcrumb b{color:var(--text)}
+.c-title{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px}
+.c-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.c-toolbar{display:flex;align-items:center;gap:10px;padding:0 22px 14px;flex-shrink:0}
+.search-wrap{position:relative;flex:1;max-width:300px}
+.search-ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:12px;pointer-events:none}
+.search-inp{width:100%;padding:8px 10px 8px 30px;background:var(--elev);border:1px solid var(--bord);border-radius:8px;color:var(--text);font-size:12px;transition:all var(--t)}
+.search-inp:focus{border-color:var(--ba);box-shadow:0 0 0 2px var(--adim)}
+.search-inp::placeholder{color:var(--faint)}
+.c-scroll{flex:1;overflow-y:auto;padding:0 22px 22px;scrollbar-width:thin;scrollbar-color:var(--elev) transparent}
+.c-scroll::-webkit-scrollbar{width:5px}
+.c-scroll::-webkit-scrollbar-thumb{background:var(--elev);border-radius:3px}
+
+/* Grille chaînes */
+.ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
+.ch-card{background:rgba(26,31,46,.8);border:1px solid var(--bord);border-radius:10px;padding:13px 10px;text-align:center;cursor:pointer;transition:all var(--t);display:flex;flex-direction:column;align-items:center;gap:7px;width:100%}
+.ch-card:hover{border-color:var(--ba);transform:translateY(-2px);box-shadow:0 5px 16px rgba(0,0,0,.4)}
+.ch-card.pl{border-color:var(--acc);box-shadow:var(--glow)}
+.ch-logo{width:46px;height:46px;border-radius:8px;background:var(--elev);display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;flex-shrink:0}
+.ch-logo img{width:100%;height:100%;object-fit:contain;padding:4px}
+.ch-name{font-size:11px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+.ch-card:hover .ch-name,.ch-card.pl .ch-name{color:var(--text)}
+.ch-live{font-size:9px;padding:1px 5px;border-radius:999px;background:rgba(255,71,87,.15);color:var(--red);border:1px solid rgba(255,71,87,.3);font-weight:600}
+
+/* Grille accueil dossiers */
+.folder-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:24px}
+.folder-tile{background:rgba(26,31,46,.8);border:1px solid var(--bord);border-radius:11px;padding:16px 12px;cursor:pointer;transition:all var(--t);display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.folder-tile:hover{border-color:var(--ba);transform:translateY(-2px)}
+.folder-tile-ico{font-size:26px}
+.folder-tile-name{font-size:12px;font-weight:600;color:var(--muted)}
+.folder-tile:hover .folder-tile-name{color:var(--text)}
+.folder-tile-cnt{font-size:10px;color:var(--faint)}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;margin-top:20px}
+.sec-title{font-size:13px;font-weight:700}
+.sec-more{font-size:11px;color:var(--acc);padding:3px 10px;border-radius:999px;border:1px solid var(--ba);background:var(--adim);transition:all var(--t)}
+.sec-more:hover{background:var(--acc);color:#000}
+
+/* Films */
+.mv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:12px}
+.mv-card{cursor:pointer;transition:all var(--t)}
+.mv-card:hover{transform:scale(1.04)}
+.mv-poster{aspect-ratio:2/3;background:var(--elev);border-radius:10px;overflow:hidden;position:relative;margin-bottom:6px;border:1px solid var(--bord)}
+.mv-poster img{width:100%;height:100%;object-fit:cover}
+.mv-fall{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px}
+.mv-over{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85),transparent 55%);opacity:0;transition:opacity var(--t);display:flex;align-items:center;justify-content:center}
+.mv-card:hover .mv-over{opacity:1}
+.mv-play{width:34px;height:34px;border-radius:50%;background:var(--acc);display:grid;place-items:center;font-size:13px;color:#000}
+.mv-rat{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.75);padding:1px 4px;border-radius:4px;font-size:9px;font-weight:600;color:#ffd700}
+.mv-title{font-size:11px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Player */
+.player{position:fixed;inset:0;background:#000;z-index:200;display:flex;flex-direction:column}
+.pl-head{position:absolute;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(to bottom,rgba(0,0,0,.9),transparent);display:flex;align-items:center;gap:12px;z-index:1}
+.pl-back{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);display:grid;place-items:center;font-size:15px;color:#fff}
+.pl-back:hover{background:rgba(255,255,255,.22)}
+.pl-video{width:100%;height:100%;object-fit:contain;background:#000}
+.pl-err{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--muted);text-align:center;padding:20px}
+
+/* Login */
+.login-bg{position:fixed;inset:0;background:rgba(0,0,0,.92);display:grid;place-items:center;z-index:300;padding:20px}
+.login-card{background:var(--surf);border:1px solid var(--bord);border-radius:18px;padding:32px;width:100%;max-width:360px}
+.login-logo{width:48px;height:48px;background:var(--acc);border-radius:12px;display:grid;place-items:center;font-size:22px;margin:0 auto 12px;box-shadow:var(--glow)}
+.login-title{font-size:18px;font-weight:700;text-align:center;margin-bottom:2px}
+.login-sub{font-size:12px;color:var(--muted);text-align:center;margin-bottom:22px}
+.lf{margin-bottom:12px}
+.ll{font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+.li{width:100%;padding:9px 11px;background:var(--elev);border:1px solid var(--bord);border-radius:8px;color:var(--text);font-size:13px;transition:all var(--t)}
+.li:focus{border-color:var(--ba);box-shadow:0 0 0 2px var(--adim)}
+.li::placeholder{color:var(--faint)}
+.login-btn{width:100%;padding:11px;background:var(--acc);color:#000;border-radius:8px;font-size:13px;font-weight:700;transition:all var(--t);margin-top:4px;display:flex;align-items:center;justify-content:center;gap:7px}
+.login-btn:hover:not(:disabled){background:#2adeff;box-shadow:var(--glow)}
+.login-btn:disabled{opacity:.45;cursor:not-allowed}
+.login-err{padding:8px 11px;background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);border-radius:8px;color:var(--red);font-size:12px;margin-bottom:12px}
+
+@keyframes sh{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.sk{background:linear-gradient(90deg,var(--elev) 25%,rgba(26,31,46,.4) 50%,var(--elev) 75%);background-size:800px 100%;animation:sh 1.4s infinite linear;border-radius:8px}
+.empty{display:flex;flex-direction:column;align-items:center;padding:48px 20px;color:var(--faint);text-align:center;gap:8px}
+.empty-ico{font-size:38px;opacity:.3}
+.empty-txt{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback, useRef, useEffect } = React;
+
+// ════════════════════════════════════════════════════════
+// STRUCTURE DES DOSSIERS
+// Chaque enfant a une fonction match(streamName) -> bool
+// ════════════════════════════════════════════════════════
+const TREE = [
+  {
+    id: "france", icon: "🇫🇷", label: "France", color: "#4fa3e0",
+    children: [
+      { id: "generale",  icon: "📡", label: "Généraliste TNT",
+        match: n => /\b(TF1|TF\s*1|TMC|TFX|M\s*6|W9|6TER|C8|CSTAR|ARTE|FRANCE\s*[2345]|FRANCE\s*INFO|NRJ\s*12|CHERIE\s*25|GULLI|RMC\s*DECOUVERTE|PARIS\s*PREMIERE|LCP|PUBLIC\s*SENAT|TFOU|COMEDIE|SERIE\s*CLUB|TREK|USHUAIA|HISTOIRE)\b/i.test(n) && !/^AR|^AM|^AF|^TR/i.test(n) },
+      { id: "canal_fr",  icon: "📺", label: "Canal+ / Bouquet",
+        match: n => /\bCANAL\s*\+(?!\s*SPORT|\s*FOOT|\s*PREMIER|\s*LEAGUE)|\bOCS\b|\bCANAL\s*DECALE|\bCANAL\s*FAM|◆.*CANAL|CANAL\+.*FRANCE/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "divert",    icon: "🎪", label: "Divertissement",
+        match: n => /\b(NRJ\s*12|VIRGIN|W9|NUMERO\s*23|TEVA|MCM|TRACE|FUN\s*TV|D8|D17|NT1|AB\s*[123]|GAME\s*ONE|J.ONE|MANGAS|PLUG\s*TV|TOUTE\s*L.HISTOIRE)\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "cinema_fr", icon: "🎬", label: "Cinéma FR",
+        match: n => /\b(TCM|CINE\+|CINE\s*PLUS|PARAMOUNT|ACTION|FRISSON|ADVENTURE|EPIC|POLAR|SF|THRILLER|CRIME|OCS\s*(?:MAX|CITY|CHOC|GEANTS)|CANAL\+\s*CINEMA|CINÉ\+)\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "info",      icon: "📰", label: "Info / Actu",
+        match: n => /\b(BFM|CNEWS|LCI|FRANCE\s*24|I24|EURONEWS|RFI|TV5|LCP|PUBLIC\s*SENAT|FRANCE\s*INFO)\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "enfants",   icon: "🎈", label: "Enfants / Jeunesse",
+        match: n => /\b(TIJI|PIWI|BOING|BOOMERANG|NICKELODEON|NICK\s*JR|DISNEY\s*(?:JR|JUNIOR|CHANNEL)|CARTOON|GULLI|TFOU|CANAL\s*J|TELETOON|POP)\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "music",     icon: "🎵", label: "Musique",
+        match: n => /\b(MTV|VH1|MCM|M6\s*MUSIC|NRJ\s*(?:HITS|MUSIC)|RFM\s*TV|MEZZO|MUZZIK|JAZZ|CLASSICA|TRACE\s*(?:URBAN|LATINA|AFRICA|GOSPEL))\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+      { id: "docu",      icon: "🎙️", label: "Documentaire",
+        match: n => /\b(PLANETE|DISCOVERY|NATIONAL\s*GEO|NGC|SCIENCE|VOYAGE|USHUAIA|TREK|ANIMAUX|CHASSE|PECHE|HISTOIRE|INVESTIGATION|CRIME|TOUTE\s*L.HISTOIRE|RMC\s*DECOUVERTE|SEASONS)\b/i.test(n) && !/^AR|^AM|^AF/i.test(n) },
+    ]
+  },
+  {
+    id: "sport", icon: "🏆", label: "Sports", color: "#2ed573",
+    children: [
+      { id: "ligue1",      icon: "⚽", label: "Ligue 1 / Foot FR",   match: n => n.startsWith("FR| LIGUE") || /FRANCE PPV/i.test(n) },
+      { id: "bein",        icon: "🎯", label: "beIN Sports FR",      match: n => n.startsWith("FR| BEIN") },
+      { id: "canal_sport", icon: "📺", label: "Canal+ Sport / Foot", match: n => n.startsWith("FR| CANAL") },
+      { id: "rmc",         icon: "🔴", label: "RMC Sport",           match: n => n.startsWith("FR| RMC") },
+      { id: "lequipe",     icon: "📰", label: "L'Équipe TV",         match: n => n.startsWith("FR| L") && /EQUIPE/i.test(n) },
+      { id: "roland",      icon: "🎾", label: "Roland Garros",       match: n => /ROLAND GARROS/i.test(n) },
+      { id: "f1",          icon: "🏎️", label: "F1 / MotoGP",        match: n => /VIP.*F1|F1 AND MOTO/i.test(n) },
+    ]
+  },
+];
+
+// Classer un stream par son nom — retourne {folderId, subId} ou null
+function classifyByName(name) {
+  if (!name) return null;
+  const n = name.trim();
+  for (const folder of TREE) {
+    for (const sub of folder.children) {
+      if (sub.match(n)) return { folderId: folder.id, subId: sub.id };
+    }
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════════════
+// API
+// ════════════════════════════════════════════════════════
+function useApi() {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+
+  const connect = useCallback(async ({ server, username, password }) => {
+    setLoading(true); setError(null);
+    try {
+      const base = server.replace(/\/$/, "");
+      const q    = `username=${username}&password=${password}`;
+      const get  = a => fetch(`${base}/player_api.php?${q}${a?"&action="+a:""}`).then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+
+      const auth = await get("");
+      if (auth.user_info?.auth === 0) throw new Error("Identifiants invalides");
+
+      const [liveStreams, vod, seriesCats, series, vodCats] = await Promise.all([
+        get("get_live_streams"),
+        get("get_vod_streams"),
+        get("get_series_categories"),
+        get("get_series"),
+        get("get_vod_categories"),
+      ]);
+
+      // Classer chaque stream live par son NOM
+      const streams = liveStreams.map(s => {
+        const cl = classifyByName(s.name || "");
+        if (!cl) return null;
+        return { ...s, ...cl, streamUrl: `${base}/live/${username}/${password}/${s.stream_id}.m3u8` };
+      }).filter(Boolean);
+
+      const movies = vod.map(m => ({
+        ...m, streamUrl: `${base}/movie/${username}/${password}/${m.stream_id}.${m.container_extension||"mp4"}`
+      }));
+
+      setData({ userInfo: auth.user_info, streams, movies, vodCats, seriesCats, series });
+      setLoading(false); return true;
+    } catch(e) { setError(e.message||"Erreur"); setLoading(false); return false; }
+  }, []);
+
+  return { connect, data, loading, error };
+}
+
+// ════════════════════════════════════════════════════════
+// PLAYER HLS
+// ════════════════════════════════════════════════════════
+function Player({ item, onClose }) {
+  const ref = useRef(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    const v = ref.current; if (!v) return; setErr(false);
+    const url = item.streamUrl;
+    if (url.includes(".m3u8") && window.Hls?.isSupported()) {
+      const h = new window.Hls({ enableWorker:false });
+      h.loadSource(url); h.attachMedia(v);
+      h.on(window.Hls.Events.MANIFEST_PARSED, () => v.play().catch(()=>{}));
+      h.on(window.Hls.Events.ERROR, (_,d) => { if(d.fatal) setErr(true); });
+      return () => h.destroy();
+    }
+    v.src = url; v.play().catch(()=>{});
+  }, [item.streamUrl]);
+  return (
+    <div className="player">
+      <div className="pl-head">
+        <button className="pl-back" onClick={onClose}>←</button>
+        <div>
+          <div style={{fontSize:14,fontWeight:600}}>{item.name}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.45)"}}>En lecture</div>
+        </div>
+      </div>
+      {err
+        ? <div className="pl-err"><div style={{fontSize:40,opacity:.3}}>📡</div><div>Flux indisponible</div></div>
+        : <video ref={ref} className="pl-video" controls playsInline onError={()=>setErr(true)}/>
+      }
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════════════════════════
+function Login({ onConnect, loading, error }) {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('iptv_creds')||'{}'); } catch(e){return{};} })();
+  const [f, setF] = useState({ server:saved.server||"", username:saved.username||"", password:saved.password||"" });
+  const [remember, setRemember] = useState(!!saved.server);
+  const set = e => setF(p=>({...p,[e.target.name]:e.target.value}));
+  const ok  = f.server && f.username && f.password;
+
+  const handleConnect = () => {
+    if (!ok) return;
+    if (remember) localStorage.setItem('iptv_creds', JSON.stringify(f));
+    else localStorage.removeItem('iptv_creds');
+    onConnect(f);
+  };
+
+  return (
+    <div className="login-bg">
+      <div className="login-card">
+        <div className="login-logo">📺</div>
+        <div className="login-title">IPTVStream FR</div>
+        <div className="login-sub">Identifiants Xtream Codes</div>
+        {error && <div className="login-err">⚠️ {error}</div>}
+        {[
+          ["server","URL Serveur","http://votreserveur.com:8080","url"],
+          ["username","Utilisateur","username","text"],
+          ["password","Mot de passe","••••••••","password"]
+        ].map(([name,label,ph,type])=>(
+          <div className="lf" key={name}>
+            <label className="ll">{label}</label>
+            <input className="li" name={name} type={type} placeholder={ph} value={f[name]} onChange={set}/>
+          </div>
+        ))}
+        <div style={{display:"flex",alignItems:"center",gap:10,margin:"8px 0"}}>
+          <input type="checkbox" id="rem" checked={remember} onChange={e=>setRemember(e.target.checked)}
+            style={{width:18,height:18,cursor:"pointer",accentColor:"var(--acc)"}}/>
+          <label htmlFor="rem" style={{fontSize:13,color:"var(--muted)",cursor:"pointer"}}>
+            Se souvenir de moi
+          </label>
+        </div>
+        <button className="login-btn" onClick={handleConnect} disabled={loading||!ok}>
+          {loading?"⏳ Chargement…":"▶ Se connecter"}
+        </button>
+        {saved.server && (
+          <button onClick={()=>{localStorage.removeItem('iptv_creds');setF({server:"",username:"",password:""});}}
+            style={{width:"100%",marginTop:8,padding:"8px",background:"none",border:"1px solid var(--bord)",borderRadius:8,color:"var(--faint)",fontSize:12,cursor:"pointer"}}>
+            🗑️ Effacer les identifiants sauvegardés
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// SIDEBAR
+// ════════════════════════════════════════════════════════
+function Sidebar({ sel, setSel, streams, userInfo, onLogout }) {
+  const [open, setOpen] = useState({france:true, sport:true});
+
+  // Compter les streams par sous-dossier
+  const counts = useMemo(() => {
+    const map = {};
+    (streams||[]).forEach(s => {
+      const k = s.folderId+":"+s.subId;
+      map[k] = (map[k]||0) + 1;
+    });
+    return map;
+  }, [streams]);
+
+  const exp = userInfo?.exp_date ? new Date(userInfo.exp_date*1000).toLocaleDateString("fr-FR") : null;
+
+  return (
+    <aside className="sb">
+      <div className="sb-logo">
+        <div className="sb-logo-ico">📺</div>
+        <span className="sb-logo-txt">IPTV<span>Stream</span></span>
+      </div>
+
+      <div className="sb-scroll">
+        <button className={`sb-link ${sel.type==="home"?"on":""}`} onClick={()=>setSel({type:"home"})}>
+          🏠 Accueil
+        </button>
+
+        {TREE.map(folder => {
+          const total = folder.children.reduce((s,sub) => s+(counts[folder.id+":"+sub.id]||0), 0);
+          if (!total) return null;
+          const isOpen = open[folder.id];
+          return (
+            <div key={folder.id}>
+              <div className={`folder-hd ${sel.type==="folder"&&sel.folderId===folder.id?"on":""}`}
+                onClick={()=>{ setOpen(p=>({...p,[folder.id]:!p[folder.id]})); setSel({type:"folder",folderId:folder.id}); }}>
+                <span className={`folder-arrow ${isOpen?"open":""}`}>▶</span>
+                <span className="folder-ico">{folder.icon}</span>
+                <span className="folder-lbl">{folder.label}</span>
+                <span className="folder-cnt">{total}</span>
+              </div>
+              {isOpen && (
+                <div className="sub-list">
+                  {folder.children.map(sub => {
+                    const n = counts[folder.id+":"+sub.id]||0;
+                    if (!n) return null;
+                    return (
+                      <button key={sub.id}
+                        className={`sub-btn ${sel.type==="sub"&&sel.folderId===folder.id&&sel.subId===sub.id?"on":""}`}
+                        onClick={()=>setSel({type:"sub",folderId:folder.id,subId:sub.id})}>
+                        <span className="sub-ico">{sub.icon}</span>
+                        <span className="sub-lbl">{sub.label}</span>
+                        <span className="sub-cnt">{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="sb-divider"/>
+        <button className={`sb-link ${sel.type==="vod"?"on":""}`} onClick={()=>setSel({type:"vod"})}>🎬 Films / VOD</button>
+        <button className={`sb-link ${sel.type==="series"?"on":""}`} onClick={()=>setSel({type:"series"})}>🎭 Séries</button>
+      </div>
+
+      {userInfo && (
+        <div className="sb-foot">
+          <div className="sb-av">{userInfo.username?.[0]?.toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="sb-uname">{userInfo.username}</div>
+            {exp && <div className="sb-exp">Valide jusqu'au {exp}</div>}
+          </div>
+          <button className="logout" onClick={onLogout}>⏏</button>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// CONTENU
+// ════════════════════════════════════════════════════════
+function Content({ sel, setSel, data, loading }) {
+  const [q, setQ]          = useState("");
+  const [playing, setPlay] = useState(null);
+  useEffect(()=>{ setQ(""); },[sel]);
+
+  const { streams, movies, vodCats, seriesCats, series } = data||{};
+
+  // Streams selon sélection
+  const visibleStreams = useMemo(()=>{
+    let list = streams||[];
+    if (sel.type==="sub") list = list.filter(s=>s.folderId===sel.folderId&&s.subId===sel.subId);
+    else if (sel.type==="folder") list = list.filter(s=>s.folderId===sel.folderId);
+    if (q) list = list.filter(s=>s.name?.toLowerCase().includes(q.toLowerCase()));
+    return list;
+  },[streams,sel,q]);
+
+  const folder = TREE.find(f=>f.id===sel.folderId);
+  const sub    = folder?.children.find(s=>s.id===sel.subId);
+
+  const title =
+    sel.type==="home"   ? "Accueil" :
+    sel.type==="vod"    ? "Films / VOD" :
+    sel.type==="series" ? "Séries" :
+    sel.type==="sub"    ? sub?.label :
+    sel.type==="folder" ? folder?.label : "";
+
+  const icon =
+    sel.type==="home"   ? "🏠" :
+    sel.type==="vod"    ? "🎬" :
+    sel.type==="series" ? "🎭" :
+    sel.type==="sub"    ? sub?.icon :
+    sel.type==="folder" ? folder?.icon : "";
+
+  if (loading) return (
+    <div className="content">
+      <div className="c-scroll" style={{padding:22}}>
+        <div className="ch-grid">{Array.from({length:16}).map((_,i)=><div key={i} className="sk" style={{height:100,borderRadius:10}}/>)}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {playing && <Player item={playing} onClose={()=>setPlay(null)}/>}
+      <div className="content">
+        <div className="c-head">
+          <div className="breadcrumb">
+            IPTVStream {folder ? <span> › {folder.label}</span> : ""} {sub ? <span> › <b>{sub.label}</b></span> : ""}
+          </div>
+          <div className="c-title" style={{color:folder?.color||"var(--text)"}}>
+            {icon} {title}
+          </div>
+          {(sel.type==="sub"||sel.type==="folder") && (
+            <div className="c-sub">{visibleStreams.length} chaîne{visibleStreams.length>1?"s":""}</div>
+          )}
+        </div>
+
+        {(sel.type==="sub"||sel.type==="folder") && (
+          <div className="c-toolbar">
+            <div className="search-wrap">
+              <span className="search-ico">🔍</span>
+              <input className="search-inp" placeholder="Rechercher…" value={q} onChange={e=>setQ(e.target.value)}/>
+            </div>
+          </div>
+        )}
+
+        <div className="c-scroll">
+
+          {/* ACCUEIL */}
+          {sel.type==="home" && (
+            TREE.map(folder=>(
+              <div key={folder.id}>
+                <div className="sec-head">
+                  <div className="sec-title" style={{color:folder.color}}>{folder.icon} {folder.label}</div>
+                  <button className="sec-more" onClick={()=>setSel({type:"folder",folderId:folder.id})}>Tout voir →</button>
+                </div>
+                <div className="folder-grid">
+                  {folder.children.map(sub=>{
+                    const n=(streams||[]).filter(s=>s.folderId===folder.id&&s.subId===sub.id).length;
+                    if(!n) return null;
+                    return (
+                      <div key={sub.id} className="folder-tile" onClick={()=>setSel({type:"sub",folderId:folder.id,subId:sub.id})}>
+                        <div className="folder-tile-ico">{sub.icon}</div>
+                        <div className="folder-tile-name">{sub.label}</div>
+                        <div className="folder-tile-cnt">{n} chaînes</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* VUE DOSSIER PARENT : aperçu des sous-dossiers */}
+          {sel.type==="folder" && !q && (
+            (folder?.children||[]).map(sub=>{
+              const rows=(streams||[]).filter(s=>s.folderId===sel.folderId&&s.subId===sub.id).slice(0,8);
+              if(!rows.length) return null;
+              return (
+                <div key={sub.id} style={{marginBottom:24}}>
+                  <div className="sec-head">
+                    <div className="sec-title">{sub.icon} {sub.label}</div>
+                    <button className="sec-more" onClick={()=>setSel({type:"sub",folderId:sel.folderId,subId:sub.id})}>Tout voir →</button>
+                  </div>
+                  <div className="ch-grid">
+                    {rows.map(s=><ChCard key={s.stream_id} s={s} playing={playing?.stream_id===s.stream_id} onPlay={setPlay}/>)}
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {/* VUE SOUS-DOSSIER */}
+          {sel.type==="sub" && (
+            visibleStreams.length===0
+              ? <div className="empty"><div className="empty-ico">{sub?.icon||"📡"}</div><div className="empty-txt">Aucune chaîne</div></div>
+              : <div className="ch-grid">{visibleStreams.map(s=><ChCard key={s.stream_id} s={s} playing={playing?.stream_id===s.stream_id} onPlay={setPlay}/>)}</div>
+          )}
+
+          {/* RECHERCHE dans dossier */}
+          {sel.type==="folder" && q && (
+            visibleStreams.length===0
+              ? <div className="empty"><div className="empty-ico">🔍</div><div className="empty-txt">Aucun résultat</div></div>
+              : <div className="ch-grid">{visibleStreams.map(s=><ChCard key={s.stream_id} s={s} playing={playing?.stream_id===s.stream_id} onPlay={setPlay}/>)}</div>
+          )}
+
+          {/* VOD */}
+          {sel.type==="vod" && (
+            <div className="mv-grid">
+              {(movies||[]).map(m=>(
+                <div key={m.stream_id} className="mv-card" onClick={()=>setPlay(m)}>
+                  <div className="mv-poster">
+                    {m.stream_icon?<img src={m.stream_icon} alt={m.name} onError={e=>e.target.style.display="none"}/>:<div className="mv-fall">🎬</div>}
+                    {m.rating&&<div className="mv-rat">⭐{parseFloat(m.rating).toFixed(1)}</div>}
+                    <div className="mv-over"><div className="mv-play">▶</div></div>
+                  </div>
+                  <div className="mv-title">{m.name}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* SÉRIES */}
+          {sel.type==="series" && (
+            <div className="mv-grid">
+              {(series||[]).map(s=>(
+                <div key={s.series_id} className="mv-card">
+                  <div className="mv-poster">
+                    {s.cover?<img src={s.cover} alt={s.name} onError={e=>e.target.style.display="none"}/>:<div className="mv-fall">🎭</div>}
+                    {s.rating&&<div className="mv-rat">⭐{parseFloat(s.rating).toFixed(1)}</div>}
+                    <div className="mv-over"><div className="mv-play">▶</div></div>
+                  </div>
+                  <div className="mv-title">{s.name}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Card chaîne
+function ChCard({ s, playing, onPlay }) {
+  const [ok,setOk]=useState(true);
+  return (
+    <button className={`ch-card ${playing?"pl":""}`} onClick={()=>onPlay(s)}>
+      <div className="ch-logo">
+        {s.stream_icon&&ok?<img src={s.stream_icon} alt={s.name} onError={()=>setOk(false)}/>:"📡"}
+      </div>
+      <div className="ch-name">{s.name}</div>
+      {playing&&<span className="ch-live">▶ LIVE</span>}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// APP
+// ════════════════════════════════════════════════════════
+function App() {
+  const [sel,setSel]            = useState({type:"home"});
+  const [loggedIn,setLoggedIn]  = useState(false);
+  const {connect,data,loading,error} = useApi();
+  const handleConnect = async c => { const ok=await connect(c); if(ok) setLoggedIn(true); };
+
+  // Auto-connexion si identifiants sauvegardés
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('iptv_creds')||'{}');
+      if (saved.server && saved.username && saved.password) {
+        handleConnect(saved);
+      }
+    } catch(e) {}
+  }, []);
+  return (
+    <div className="app">
+      {!loggedIn && <Login onConnect={handleConnect} loading={loading} error={error}/>}
+      {loggedIn && (
+        <>
+          <Sidebar sel={sel} setSel={setSel} streams={data?.streams} userInfo={data?.userInfo} onLogout={()=>setLoggedIn(false)}/>
+          <Content sel={sel} setSel={setSel} data={data} loading={loading}/>
+        </>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
